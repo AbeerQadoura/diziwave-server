@@ -18,7 +18,7 @@ SUPABASE_KEY = "your-anon-key"
 # إنشاء اتصال Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# إعداد تيليجرام (بدون تشغيله هنا)
+# إعداد تيليجرام
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 # --- دالة مساعدة لروابط تيليجرام ---
@@ -35,16 +35,12 @@ def parse_telegram_link(link):
         return chat_username, msg_id
     return None, None
 
-# --- إدارة دورة حياة تيليجرام (الحل للمشكلة) ---
+# --- إدارة دورة حياة تيليجرام ---
 async def telegram_lifecycle(app):
-    # 1. عند تشغيل السيرفر: اتصل بتيليجرام
     print("⏳ جاري الاتصال بتيليجرام...")
     await client.start(bot_token=BOT_TOKEN)
     print("✅ Telegram Client Connected!")
-    
-    yield # هنا يعمل السيرفر ويبقى ينتظر
-    
-    # 2. عند إيقاف السيرفر: افصل تيليجرام بأمان
+    yield
     print("🛑 جاري فصل تيليجرام...")
     await client.disconnect()
     print("👋 Telegram Client Disconnected")
@@ -123,33 +119,54 @@ async def handle_search(request):
         return web.json_response([], headers=cors_headers)
 
     try:
-        # البحث في Supabase
         response = supabase.table('series') \
             .select('*') \
             .ilike('title', f'%{query}%') \
+            .execute()
+        return web.json_response(response.data, headers=cors_headers)
+
+    except Exception as e:
+        return web.json_response({'error': str(e)}, status=500, headers=cors_headers)
+
+# --- 3. 🔥 (جديد) دالة جلب الحلقات 🔥 ---
+async def handle_episodes(request):
+    cors_headers = {'Access-Control-Allow-Origin': '*'}
+    # نستلم رقم المسلسل من الرابط
+    series_id = request.query.get('id')
+
+    if not series_id:
+        return web.json_response({'error': 'Missing series_id'}, status=400, headers=cors_headers)
+
+    try:
+        # نبحث في جدول episodes عن الحلقات التي تتبع هذا المسلسل
+        # ونرتبها حسب الموسم ثم رقم الحلقة
+        response = supabase.table('episodes') \
+            .select('*') \
+            .eq('series_id', series_id) \
+            .order('season', desc=False) \
+            .order('episode_number', desc=False) \
             .execute()
         
         return web.json_response(response.data, headers=cors_headers)
 
     except Exception as e:
-        print(f"Error searching: {e}")
+        print(f"Error fetching episodes: {e}")
         return web.json_response({'error': str(e)}, status=500, headers=cors_headers)
 
 # --- إعداد التطبيق ---
 async def init_app():
     app = web.Application()
-    
-    # 🔥 هنا السر: نربط دورة حياة تيليجرام بالتطبيق 🔥
     app.cleanup_ctx.append(telegram_lifecycle)
     
     # ربط المسارات
     app.router.add_get('/stream', handle_stream)
     app.router.add_options('/stream', handle_stream)
     app.router.add_get('/api/search', handle_search)
+    # 👇 ربط مسار الحلقات الجديد
+    app.router.add_get('/api/episodes', handle_episodes) 
     
     return app
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    # نستخدم web.run_app مباشرة وهي تدير الـ Event Loop بشكل صحيح
     web.run_app(init_app(), port=port)
