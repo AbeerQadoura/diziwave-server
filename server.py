@@ -13,8 +13,8 @@ SESSION_NAME = 'diziwave_session'
 
 # إعدادات Supabase (يجب وضعها هنا أو في Environment Variables)
 # استبدل القيم أدناه بمعلومات مشروعك في Supabase
-SUPABASE_URL = "https://your-project-id.supabase.co" 
-SUPABASE_KEY = "your-anon-key-here"
+SUPABASE_URL = "https://dyeubqqdhxzdhitvaojl.supabase.co" 
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5ZXVicXFkaHh6ZGhpdHZhb2psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzcwOTUsImV4cCI6MjA4Mjk1MzA5NX0.nHm59av-JGew3WcQcE5y-vgWKPD2MAMPtPWmSwokmyA"
 
 # إنشاء اتصال Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -157,3 +157,4 @@ if __name__ == '__main__':
         web.run_app(app, port=port)
     except Exception as e:
         print(f"💥 Fatal Error: {e}")
+
