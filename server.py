@@ -12,8 +12,8 @@ BOT_TOKEN = '8595298322:AAHnRe8FQ-dVWRwVOqaLkn5s4tuWwgQfe8I'
 SESSION_NAME = 'diziwave_session'
 
 # إعدادات Supabase (تأكد من صحتها)
-SUPABASE_URL = "https://your-project-url.supabase.co" 
-SUPABASE_KEY = "your-anon-key"
+SUPABASE_URL = "https://dyeubqqdhxzdhitvaojl.supabase.co" 
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5ZXVicXFkaHh6ZGhpdHZhb2psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzcwOTUsImV4cCI6MjA4Mjk1MzA5NX0.nHm59av-JGew3WcQcE5y-vgWKPD2MAMPtPWmSwokmyA"
 
 # إنشاء اتصال Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -170,3 +170,4 @@ async def init_app():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     web.run_app(init_app(), port=port)
+
