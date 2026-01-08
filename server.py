@@ -3,7 +3,7 @@ import re
 import asyncio
 from telethon import TelegramClient
 from aiohttp import web
-from supabase import create_client, Client # تأكد أنك ثبتت مكتبة supabase
+from supabase import create_client, Client
 
 # --- الإعدادات ---
 API_ID = '38472605' 
@@ -11,22 +11,17 @@ API_HASH = '9212506c8bf2550cafbc42219b63590e'
 BOT_TOKEN = '8595298322:AAHnRe8FQ-dVWRwVOqaLkn5s4tuWwgQfe8I'
 SESSION_NAME = 'diziwave_session'
 
-# إعدادات Supabase (يجب وضعها هنا أو في Environment Variables)
-# استبدل القيم أدناه بمعلومات مشروعك في Supabase
-SUPABASE_URL = "https://dyeubqqdhxzdhitvaojl.supabase.co" 
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5ZXVicXFkaHh6ZGhpdHZhb2psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzcwOTUsImV4cCI6MjA4Mjk1MzA5NX0.nHm59av-JGew3WcQcE5y-vgWKPD2MAMPtPWmSwokmyA"
+# إعدادات Supabase (تأكد من صحتها)
+SUPABASE_URL = "https://your-project-url.supabase.co" 
+SUPABASE_KEY = "your-anon-key"
 
 # إنشاء اتصال Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# إعداد تيليجرام
+# إعداد تيليجرام (بدون تشغيله هنا)
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
-async def start_telegram():
-    print("⏳ جاري الاتصال بتيليجرام...")
-    await client.start(bot_token=BOT_TOKEN)
-    print("✅ Telegram Client Connected!")
-
+# --- دالة مساعدة لروابط تيليجرام ---
 def parse_telegram_link(link):
     if 't.me/c/' in link:
         parts = link.split('/')
@@ -39,6 +34,20 @@ def parse_telegram_link(link):
         msg_id = int(parts[-1])
         return chat_username, msg_id
     return None, None
+
+# --- إدارة دورة حياة تيليجرام (الحل للمشكلة) ---
+async def telegram_lifecycle(app):
+    # 1. عند تشغيل السيرفر: اتصل بتيليجرام
+    print("⏳ جاري الاتصال بتيليجرام...")
+    await client.start(bot_token=BOT_TOKEN)
+    print("✅ Telegram Client Connected!")
+    
+    yield # هنا يعمل السيرفر ويبقى ينتظر
+    
+    # 2. عند إيقاف السيرفر: افصل تيليجرام بأمان
+    print("🛑 جاري فصل تيليجرام...")
+    await client.disconnect()
+    print("👋 Telegram Client Disconnected")
 
 # --- 1. دالة البث (Streaming) ---
 async def handle_stream(request):
@@ -105,56 +114,42 @@ async def handle_stream(request):
         print(f"❌ Error: {e}")
         return web.Response(text=str(e), status=500, headers=cors_headers)
 
-# --- 2. دالة البحث (Search) بصيغة aiohttp ---
+# --- 2. دالة البحث (Search) ---
 async def handle_search(request):
-    # إعداد CORS
-    cors_headers = {
-        'Access-Control-Allow-Origin': '*',
-    }
-    
-    # 1. استلام الكلمة
+    cors_headers = {'Access-Control-Allow-Origin': '*'}
     query = request.query.get('q', '')
 
     if not query:
         return web.json_response([], headers=cors_headers)
 
     try:
-        # 2. البحث في Supabase (تعمل بشكل متزامن عادي)
+        # البحث في Supabase
         response = supabase.table('series') \
             .select('*') \
             .ilike('title', f'%{query}%') \
             .execute()
         
-        # 3. إرجاع النتيجة
         return web.json_response(response.data, headers=cors_headers)
 
     except Exception as e:
         print(f"Error searching: {e}")
         return web.json_response({'error': str(e)}, status=500, headers=cors_headers)
 
-# --- إعداد السيرفر ---
+# --- إعداد التطبيق ---
 async def init_app():
-    await start_telegram()
     app = web.Application()
     
-    # ربط المسارات (Routes)
+    # 🔥 هنا السر: نربط دورة حياة تيليجرام بالتطبيق 🔥
+    app.cleanup_ctx.append(telegram_lifecycle)
+    
+    # ربط المسارات
     app.router.add_get('/stream', handle_stream)
     app.router.add_options('/stream', handle_stream)
-    
-    # ربط مسار البحث الجديد
     app.router.add_get('/api/search', handle_search)
     
     return app
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    print(f"🚀 تشغيل السيرفر على البورت: {port}")
-    
-    try:
-        # هذه الطريقة الصحيحة لتشغيل aiohttp
-        loop = asyncio.get_event_loop()
-        app = loop.run_until_complete(init_app())
-        web.run_app(app, port=port)
-    except Exception as e:
-        print(f"💥 Fatal Error: {e}")
-
+    # نستخدم web.run_app مباشرة وهي تدير الـ Event Loop بشكل صحيح
+    web.run_app(init_app(), port=port)
