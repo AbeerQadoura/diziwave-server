@@ -11,7 +11,7 @@ API_HASH = '9212506c8bf2550cafbc42219b63590e'
 BOT_TOKEN = '8595298322:AAHnRe8FQ-dVWRwVOqaLkn5s4tuWwgQfe8I'
 SESSION_NAME = 'diziwave_session'
 
-# إعدادات Supabase (تأكد من صحتها)
+# إعدادات Supabase
 SUPABASE_URL = "https://dyeubqqdhxzdhitvaojl.supabase.co" 
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5ZXVicXFkaHh6ZGhpdHZhb2psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzcwOTUsImV4cCI6MjA4Mjk1MzA5NX0.nHm59av-JGew3WcQcE5y-vgWKPD2MAMPtPWmSwokmyA"
 
@@ -110,7 +110,7 @@ async def handle_stream(request):
         print(f"❌ Error: {e}")
         return web.Response(text=str(e), status=500, headers=cors_headers)
 
-# --- 2. دالة البحث (Search) ---
+# --- 2. 🔥 دالة البحث (Search) المعدلة 🔥 ---
 async def handle_search(request):
     cors_headers = {'Access-Control-Allow-Origin': '*'}
     query = request.query.get('q', '')
@@ -119,27 +119,32 @@ async def handle_search(request):
         return web.json_response([], headers=cors_headers)
 
     try:
+        # التعديل هنا:
+        # نستخدم .or_ للبحث في (العنوان) أو (التصنيفات) أو (الممثلين)
+        # title.ilike.%query%: يبحث عن جزء من النص في العنوان
+        # genres.cs.{query}: يبحث هل المصفوفة تحتوي على هذا التصنيف
+        # cast_members.cs.{query}: يبحث هل المصفوفة تحتوي على هذا الممثل
+        
         response = supabase.table('series') \
             .select('*') \
-            .ilike('title', f'%{query}%') \
+            .or_(f"title.ilike.%{query}%,genres.cs.{{{query}}},cast_members.cs.{{{query}}}") \
             .execute()
+            
         return web.json_response(response.data, headers=cors_headers)
 
     except Exception as e:
+        print(f"Error searching: {e}")
         return web.json_response({'error': str(e)}, status=500, headers=cors_headers)
 
-# --- 3. 🔥 (جديد) دالة جلب الحلقات 🔥 ---
+# --- 3. دالة جلب الحلقات ---
 async def handle_episodes(request):
     cors_headers = {'Access-Control-Allow-Origin': '*'}
-    # نستلم رقم المسلسل من الرابط
     series_id = request.query.get('id')
 
     if not series_id:
         return web.json_response({'error': 'Missing series_id'}, status=400, headers=cors_headers)
 
     try:
-        # نبحث في جدول episodes عن الحلقات التي تتبع هذا المسلسل
-        # ونرتبها حسب الموسم ثم رقم الحلقة
         response = supabase.table('episodes') \
             .select('*') \
             .eq('series_id', series_id) \
@@ -162,13 +167,14 @@ async def init_app():
     app.router.add_get('/stream', handle_stream)
     app.router.add_options('/stream', handle_stream)
     app.router.add_get('/api/search', handle_search)
-    # 👇 ربط مسار الحلقات الجديد
     app.router.add_get('/api/episodes', handle_episodes) 
     
     return app
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    web.run_app(init_app(), port=port)
-
-
+    # نستخدم asyncio لتشغيل التطبيق بشكل صحيح
+    try:
+        web.run_app(init_app(), port=port)
+    except Exception as e:
+        print(f"Error starting app: {e}")
