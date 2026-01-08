@@ -109,8 +109,7 @@ async def handle_stream(request):
     except Exception as e:
         print(f"❌ Error: {e}")
         return web.Response(text=str(e), status=500, headers=cors_headers)
-
-# --- 2. 🔥 دالة البحث (Search) المعدلة 🔥 ---
+# --- 2. دالة البحث (Search) المعدلة والمحسنة ---
 async def handle_search(request):
     cors_headers = {'Access-Control-Allow-Origin': '*'}
     query = request.query.get('q', '')
@@ -119,15 +118,16 @@ async def handle_search(request):
         return web.json_response([], headers=cors_headers)
 
     try:
-        # التعديل هنا:
-        # نستخدم .or_ للبحث في (العنوان) أو (التصنيفات) أو (الممثلين)
-        # title.ilike.%query%: يبحث عن جزء من النص في العنوان
-        # genres.cs.{query}: يبحث هل المصفوفة تحتوي على هذا التصنيف
-        # cast_members.cs.{query}: يبحث هل المصفوفة تحتوي على هذا الممثل
+        # 🔥 التعديل الذكي 🔥
+        # 1. title.ilike: يبحث عن أي جزء من العنوان (بحث مرن)
+        # 2. genres.cs: يبحث في التصنيفات (وضعنا علامات تنصيص \" حول الكلمة لدعم المسافات)
+        # 3. cast_members.cs: يبحث في الممثلين (وضعنا علامات تنصيص \" لدعم الأسماء المركبة مثل Can Yaman)
+        
+        # ملاحظة: البحث في المصفوفات (cs) يتطلب كتابة الاسم كاملاً وصحيحاً (مثلاً "دراما" وليس "درام")
         
         response = supabase.table('series') \
             .select('*') \
-            .or_(f"title.ilike.%{query}%,genres.cs.{{{query}}},cast_members.cs.{{{query}}}") \
+            .or_(f"title.ilike.%{query}%,genres.cs.{{\"{query}\"}},cast_members.cs.{{\"{query}\"}}") \
             .execute()
             
         return web.json_response(response.data, headers=cors_headers)
@@ -135,7 +135,6 @@ async def handle_search(request):
     except Exception as e:
         print(f"Error searching: {e}")
         return web.json_response({'error': str(e)}, status=500, headers=cors_headers)
-
 # --- 3. دالة جلب الحلقات ---
 async def handle_episodes(request):
     cors_headers = {'Access-Control-Allow-Origin': '*'}
@@ -178,3 +177,4 @@ if __name__ == '__main__':
         web.run_app(init_app(), port=port)
     except Exception as e:
         print(f"Error starting app: {e}")
+
