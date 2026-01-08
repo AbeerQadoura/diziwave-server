@@ -3,17 +3,23 @@ import re
 import asyncio
 from telethon import TelegramClient
 from aiohttp import web
+from supabase import create_client, Client # تأكد أنك ثبتت مكتبة supabase
 
 # --- الإعدادات ---
-# يفضل دائماً وضع هذه الأسرار في Environment Variables في السيرفر لاحقاً
-# لكن للسهولة الآن سنبقيها هنا، وسأعلمك كيف تخفيها في Render
 API_ID = '38472605' 
 API_HASH = '9212506c8bf2550cafbc42219b63590e' 
 BOT_TOKEN = '8595298322:AAHnRe8FQ-dVWRwVOqaLkn5s4tuWwgQfe8I'
 SESSION_NAME = 'diziwave_session'
 
-# استخدام MemorySession لتجنب مشاكل إنشاء ملفات على السيرفر (اختياري لكن أفضل)
-# أو نتركها كما هي وسيقوم السيرفر بإنشاء الملف مؤقتاً
+# إعدادات Supabase (يجب وضعها هنا أو في Environment Variables)
+# استبدل القيم أدناه بمعلومات مشروعك في Supabase
+SUPABASE_URL = "https://your-project-id.supabase.co" 
+SUPABASE_KEY = "your-anon-key-here"
+
+# إنشاء اتصال Supabase
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# إعداد تيليجرام
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 async def start_telegram():
@@ -34,6 +40,7 @@ def parse_telegram_link(link):
         return chat_username, msg_id
     return None, None
 
+# --- 1. دالة البث (Streaming) ---
 async def handle_stream(request):
     link = request.query.get('link')
     cors_headers = {
@@ -80,8 +87,6 @@ async def handle_stream(request):
         resp = web.StreamResponse(status=206 if range_header else 200, headers=headers)
         await resp.prepare(request)
 
-        # print(f"🎬 بث من: {start_byte}") # تم إيقاف الطباعة لتسريع السيرفر
-
         try:
             async for chunk in client.iter_download(
                 message.media, 
@@ -100,22 +105,55 @@ async def handle_stream(request):
         print(f"❌ Error: {e}")
         return web.Response(text=str(e), status=500, headers=cors_headers)
 
+# --- 2. دالة البحث (Search) بصيغة aiohttp ---
+async def handle_search(request):
+    # إعداد CORS
+    cors_headers = {
+        'Access-Control-Allow-Origin': '*',
+    }
+    
+    # 1. استلام الكلمة
+    query = request.query.get('q', '')
+
+    if not query:
+        return web.json_response([], headers=cors_headers)
+
+    try:
+        # 2. البحث في Supabase (تعمل بشكل متزامن عادي)
+        response = supabase.table('series') \
+            .select('*') \
+            .ilike('title', f'%{query}%') \
+            .execute()
+        
+        # 3. إرجاع النتيجة
+        return web.json_response(response.data, headers=cors_headers)
+
+    except Exception as e:
+        print(f"Error searching: {e}")
+        return web.json_response({'error': str(e)}, status=500, headers=cors_headers)
+
+# --- إعداد السيرفر ---
 async def init_app():
     await start_telegram()
     app = web.Application()
+    
+    # ربط المسارات (Routes)
     app.router.add_get('/stream', handle_stream)
     app.router.add_options('/stream', handle_stream)
+    
+    # ربط مسار البحث الجديد
+    app.router.add_get('/api/search', handle_search)
+    
     return app
 
 if __name__ == '__main__':
-    # 🔥 التعديل الجوهري هنا 🔥
-    # السيرفر السحابي يعطينا البورت عبر متغير بيئي، وإذا لم نجده نستخدم 8080
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 تشغيل السيرفر على البورت: {port}")
     
-    # يجب استخدام host='0.0.0.0' لتلقي الاتصالات الخارجية
     try:
-        app = init_app()
-        web.run_app(app, port=port, host='0.0.0.0')
+        # هذه الطريقة الصحيحة لتشغيل aiohttp
+        loop = asyncio.get_event_loop()
+        app = loop.run_until_complete(init_app())
+        web.run_app(app, port=port)
     except Exception as e:
         print(f"💥 Fatal Error: {e}")
